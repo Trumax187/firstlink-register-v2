@@ -112,7 +112,7 @@ export default function App() {
     if (!reason?.trim()) return;
     try {
       const updated = reverseRepayment(loan,repaymentId,{reversalId:makeId("REV"),on:today(),reason:reason.trim()});
-      save(s => ({...s,loans:s.loans.map(x => x.id === id ? updated : x),collateral:s.collateral.map(x => x.id === loan.collateralId && loanStatus(updated) !== "CLEARED" && x.status === "RELEASED" ? {...x,status:"PLEDGED"} : x),events:[...s.events,pushEvent("REVERSAL","Repayment reversed: "+reason.trim(),id,{repaymentId})]}));
+      save(s => ({...s,loans:s.loans.map(x => x.id === id ? updated : x),collateral:s.collateral.map(x => x.id === loan.collateralId && loanStatus(updated) !== "CLEARED" && x.status === "RELEASED" ? {...x,status:"PLEDGED"} : x),events:[...s.events,pushEvent("REVERSAL","Repayment reversed: "+reason.trim(),id,{repaymentId,amount:loan.repayments.find(r=>r.id===repaymentId)?.amount || 0,method:loan.repayments.find(r=>r.id===repaymentId)?.method || "—",on:today(),reason:reason.trim()})]}));
       setNotice("Repayment reversal recorded; original record retained.");
     } catch(e) { setNotice(e.message); }
   }
