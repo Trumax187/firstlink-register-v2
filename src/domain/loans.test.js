@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { createLoan, totals, recordRepayment, reverseRepayment, renewLoan, canDeleteLoan } from "./loans.js";
+import { createLoan, totals, recordRepayment, reverseRepayment, renewLoan, canDeleteLoan, allocateRepayments } from "./loans.js";
 
 const loan = () => createLoan({ id:"L1", customerId:"C1", collateralId:"A1", principal:1000, mode:"percent", value:20, periodDays:30, issuedOn:"2026-11-01" });
 
@@ -35,4 +35,46 @@ test("renewal adds a separate charge without changing principal", () => {
 
 test("loan with financial history cannot be deleted", () => {
   assert.equal(canDeleteLoan(loan()), false);
+});
+
+test("allocates repayments to interest first, then principal", () => {
+  const base = loan();
+  const paid = {
+    ...base,
+    repayments: [
+      { id:"R2", amount:500, on:"2026-11-20", method:"Cash", status:"POSTED" },
+      { id:"R1", amount:100, on:"2026-11-10", method:"Cash", status:"POSTED" }
+    ]
+  };
+  const rows = allocateRepayments(paid);
+  assert.deepEqual(rows.map(x => [x.id,x.interest,x.principal]), [
+    ["R1",100,0], ["R2",100,400]
+  ]);
+});
+
+test("does not allocate a later renewal charge to an earlier repayment", () => {
+  const base = loan();
+  const value = {
+    ...base,
+    charges: [...base.charges, {id:"CH2",kind:"RENEWAL",amount:200,on:"2026-12-01"}],
+    repayments: [{id:"R1",amount:300,on:"2026-11-15",method:"Cash",status:"POSTED"}]
+  };
+  const [row] = allocateRepayments(value);
+  assert.equal(row.interest,200);
+  assert.equal(row.principal,100);
+});
+
+test("reversed repayments are excluded from allocation", () => {
+  const value = {
+    ...loan(),
+    repayments: [
+      {id:"R1",amount:500,on:"2026-11-05",method:"Cash",status:"REVERSED"},
+      {id:"R2",amount:250,on:"2026-11-06",method:"Cash",status:"POSTED"}
+    ]
+  };
+  const rows = allocateRepayments(value);
+  assert.equal(rows.length,1);
+  assert.equal(rows[0].id,"R2");
+  assert.equal(rows[0].interest,200);
+  assert.equal(rows[0].principal,50);
 });
