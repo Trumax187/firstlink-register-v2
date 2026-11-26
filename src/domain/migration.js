@@ -38,11 +38,19 @@ export function migrateV1Backup(backup) {
 
   const reversalEvents = source.events.filter(e => e.type === "repayment_reversal");
   const reversedIds = new Set();
+  const sourceRepayments = new Map();
+  for (const loan of source.loans) for (const repayment of loan.repayments || []) {
+    if (sourceRepayments.has(repayment.id)) errors.push("V1 contains duplicate repayment ID " + repayment.id + ".");
+    sourceRepayments.set(repayment.id, { loanId: loan.id, repayment });
+  }
   for (const event of reversalEvents) {
     if (!loanIds.has(event.loanId)) errors.push("Reversal event " + event.id + " refers to missing loan " + event.loanId + ".");
     if (!event.repaymentId || reversedIds.has(event.repaymentId)) errors.push("Reversal event " + event.id + " has a missing or duplicate repayment reference.");
     reversedIds.add(event.repaymentId);
-    if (!(Number(event.amount) > 0) || !validDate(event.repaymentOn || dateOnly(event.at))) errors.push("Reversal event " + event.id + " has invalid payment details.");
+    if (!(Number(event.amount) > 0) || !Number.isFinite(Number(event.amount)) || !validDate(event.repaymentOn || dateOnly(event.at))) errors.push("Reversal event " + event.id + " has invalid payment details.");
+    const original = sourceRepayments.get(event.repaymentId);
+    if (original && original.loanId !== event.loanId) errors.push("Reversal event " + event.id + " refers to a repayment on a different loan.");
+    if (original && Math.abs(Number(original.repayment.amount) - Number(event.amount)) > 0.01) errors.push("Reversal event " + event.id + " does not match the original repayment amount.");
   }
   if (errors.length) throw new Error("V1 migration stopped: " + errors.join(" "));
 
@@ -75,9 +83,15 @@ export function migrateV1Backup(backup) {
 
   const loans = source.loans.map(l => {
     const reversals = reversalsByLoan.get(l.id) || [];
+    const reversalByRepayment = new Map(reversals.map(e=>[e.repaymentId,e]));
     const repayments = [
-      ...(l.repayments || []).map(r=>({...r,status:"POSTED"})),
-      ...reversals.map(e=>({id:e.repaymentId,amount:Number(e.amount),on:e.repaymentOn || dateOnly(e.at),method:e.method || "Unknown",status:"REVERSED",reversedOn:dateOnly(e.at),reversalId:e.id,reversalReason:e.text || "Reversed in V1"}))
+      ...(l.repayments || []).map(r=>{
+        const reversal = reversalByRepayment.get(r.id);
+        return reversal
+          ? {...r,status:"REVERSED",reversedOn:dateOnly(reversal.at),reversalId:reversal.id,reversalReason:reversal.text || "Reversed in V1"}
+          : {...r,status:"POSTED"};
+      }),
+      ...reversals.filter(e=>!(l.repayments || []).some(r=>r.id===e.repaymentId)).map(e=>({id:e.repaymentId,amount:Number(e.amount),on:e.repaymentOn || dateOnly(e.at),method:e.method || "Unknown",status:"REVERSED",reversedOn:dateOnly(e.at),reversalId:e.id,reversalReason:e.text || "Reversed in V1"}))
     ];
     const charges = l.charges.map(c=>({...c,kind:String(c.kind || "initial").toUpperCase()}));
     const forfeited = String(l.status || "").toLowerCase() === "forfeited";
