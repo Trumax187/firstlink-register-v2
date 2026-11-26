@@ -53,7 +53,7 @@ export function buildPeriodReport(db, from, to) {
   if (!/^\d{4}-\d{2}-\d{2}$/.test(from) || !/^\d{4}-\d{2}-\d{2}$/.test(to) || from > to) throw new Error("Choose a valid reporting date range.");
   const rows=buildCashbookRows(db).filter(r=>within(r.date,from,to));
   const disbursements=rows.filter(r=>r.type==="Loan issued");
-  const receipts=rows.filter(r=>r.type==="Repayment");
+  const receipts=rows.filter(r=>r.type==="Repayment" || r.type==="Repayment (later reversed)");
   const reversals=rows.filter(r=>r.type==="Repayment reversal");
   const charges=rows.filter(r=>r.type==="Interest charged" || r.type==="Renewal interest charged");
   const repayments=sum(receipts,"cashIn");
