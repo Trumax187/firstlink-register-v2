@@ -297,3 +297,37 @@ test("reconciliation rejects expenses with missing categories, invalid dates or 
   assert.ok(result.errors.some(x=>x.includes("invalid date")));
   assert.ok(result.errors.some(x=>x.includes("missing a category")));
 });
+
+
+test("expense reversal restores cash without deleting the original expense", () => {
+  const db={customers:[],collateral:[],loans:[],events:[
+    {id:"EXP1",type:"EXPENSE",on:"2026-11-05",amount:50,category:"Transport",description:"Trip",method:"Cash"},
+    {id:"EXPR1",type:"EXPENSE_REVERSAL",expenseId:"EXP1",on:"2026-11-06",amount:50,category:"Transport",reason:"Duplicate entry",method:"Cash"}
+  ]};
+  const rows=buildCashbookRows(db);
+  assert.equal(rows.length,2);
+  assert.equal(rows.find(row=>row.id==="EXP1").cashOut,50);
+  assert.equal(rows.find(row=>row.id==="EXPR1").cashIn,50);
+  const summary=buildReportSummary(db);
+  assert.equal(summary.operatingExpenses,0);
+  assert.equal(summary.expenseRefunds,50);
+  assert.equal(summary.netCashPosition,0);
+  const period=buildPeriodReport(db,"2026-11-01","2026-11-30");
+  assert.equal(period.operatingExpenses,0);
+  assert.equal(period.expenseRefunds,50);
+  assert.equal(period.netCashMovement,0);
+  assert.equal(reconcileRegister(db).ok,true);
+});
+
+test("reconciliation rejects unmatched and duplicate expense reversals", () => {
+  const db={customers:[],collateral:[],loans:[],events:[
+    {id:"EXP1",type:"EXPENSE",on:"2026-11-05",amount:50,category:"Transport"},
+    {id:"EXPR1",type:"EXPENSE_REVERSAL",expenseId:"EXP1",on:"2026-11-06",amount:40},
+    {id:"EXPR2",type:"EXPENSE_REVERSAL",expenseId:"EXP1",on:"2026-11-07",amount:50},
+    {id:"EXPR3",type:"EXPENSE_REVERSAL",expenseId:"MISSING",on:"2026-11-07",amount:20}
+  ]};
+  const result=reconcileRegister(db);
+  assert.ok(result.errors.some(x=>x.includes("does not match the original expense amount")));
+  assert.ok(result.errors.some(x=>x.includes("more than one reversal")));
+  assert.ok(result.errors.some(x=>x.includes("missing expense")));
+});
