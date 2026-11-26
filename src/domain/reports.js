@@ -39,6 +39,7 @@ export function buildReportSummary(db, today = new Date()) {
   const active=loans.filter(l=>["ACTIVE","OVERDUE"].includes(loanStatus(l,today)));
   const cashReceived=sum(cashbook,"cashIn");
   const cashReversed=sum(cashbook.filter(r=>r.type==="Repayment reversal"),"cashOut");
+  const operatingExpenses=sum(cashbook.filter(r=>r.type==="Operating expense"),"cashOut");
   return {
     totalLoans:loans.length, activeLoans:active.length,
     overdueLoans:loans.filter(l=>loanStatus(l,today)==="OVERDUE").length,
@@ -47,6 +48,7 @@ export function buildReportSummary(db, today = new Date()) {
     interestCharged:sum(cashbook,"charged"),
     cashDisbursed:sum(cashbook.filter(r=>r.type==="Loan issued"),"cashOut"),
     cashReceived,cashReversed,netCashReceived:cashReceived-cashReversed,
+    operatingExpenses,netCashPosition:cashReceived-cashReversed-sum(cashbook.filter(r=>r.type==="Loan issued"),"cashOut")-operatingExpenses,
     collateralValue:sum((db.collateral||[]).filter(a=>a.status==="PLEDGED"),"estimatedValue")
   };
 }
@@ -58,6 +60,7 @@ export function buildPeriodReport(db, from, to) {
   const receipts=rows.filter(r=>r.type==="Repayment" || r.type==="Repayment (later reversed)");
   const reversals=rows.filter(r=>r.type==="Repayment reversal");
   const charges=rows.filter(r=>r.type==="Interest charged" || r.type==="Renewal interest charged");
+  const expenses=rows.filter(r=>r.type==="Operating expense");
   const repayments=sum(receipts,"cashIn");
   const reversed=sum(reversals,"cashOut");
   const charged=sum(charges,"charged");
@@ -67,7 +70,8 @@ export function buildPeriodReport(db, from, to) {
     repaymentsReceived:repayments,reversedReceipts:reversed,netCollections:repayments-reversed,
     interestCharged:charged,interestCollected:sum(receipts,"interest")-sum(reversals,"interest"),
     principalCollected:sum(receipts,"principal")-sum(reversals,"principal"),
-    netCashMovement:repayments-reversed-sum(disbursements,"cashOut"),
+    operatingExpenses:sum(expenses,"cashOut"),
+    netCashMovement:repayments-reversed-sum(disbursements,"cashOut")-sum(expenses,"cashOut"),
     rows
   };
 }
@@ -98,6 +102,12 @@ export function reconcileRegister(db) {
     if(open && asset.status!=="PLEDGED")warnings.push("Collateral "+asset.id+" has an outstanding loan but is marked "+asset.status+".");
     if(!open && asset.status==="PLEDGED")warnings.push("Collateral "+asset.id+" is marked pledged but has no outstanding loan.");
   }
+  for(const event of db.events||[])if(event.type==="EXPENSE"){
+    if(!(Number(event.amount)>0)||!Number.isFinite(Number(event.amount)))errors.push("Expense "+event.id+" has an invalid amount.");
+    const date=event.on||String(event.at||"").slice(0,10);
+    if(!validDate(date))errors.push("Expense "+event.id+" has an invalid date.");
+    if(!String(event.category||"").trim())errors.push("Expense "+event.id+" is missing a category.");
+  }
   for(const event of db.events||[])if(event.type==="REVERSAL"){
     if(!loans.has(event.loanId))errors.push("Reversal "+event.id+" refers to a missing loan.");
     if(!repayments.has(event.repaymentId))errors.push("Reversal "+event.id+" refers to a missing repayment.");
@@ -112,5 +122,5 @@ export function reconcileRegister(db) {
   const ledger=buildCashbookRows(db);
   const gross= sum(ledger,"cashIn"), reversal=sum(ledger.filter(r=>r.type==="Repayment reversal"),"cashOut");
   if(Math.abs((gross-reversal)-summary.netCashReceived)>0.01)errors.push("Cashbook net collections do not match the portfolio summary.");
-  return {ok:errors.length===0,errors,warnings,counts:{customers:(db.customers||[]).length,collateral:(db.collateral||[]).length,loans:(db.loans||[]).length,repayments:repayments.size,events:events.size},financials:{principalOutstanding:summary.principalOutstanding,outstanding:summary.outstanding,netCashReceived:summary.netCashReceived}};
+  return {ok:errors.length===0,errors,warnings,counts:{customers:(db.customers||[]).length,collateral:(db.collateral||[]).length,loans:(db.loans||[]).length,repayments:repayments.size,events:events.size},financials:{principalOutstanding:summary.principalOutstanding,outstanding:summary.outstanding,netCashReceived:summary.netCashReceived,operatingExpenses:summary.operatingExpenses,netCashPosition:summary.netCashPosition}};
 }
