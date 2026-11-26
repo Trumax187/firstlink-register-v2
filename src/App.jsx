@@ -93,6 +93,7 @@ export default function App() {
   }
   function savePolicy(e) {
     e.preventDefault();
+    if (storageError) return setNotice("Resolve the browser storage warning before changing lending policies.");
     try {
       const next=validateLendingPolicy(policyDraft);
       save(s=>({...s,settings:next}));
@@ -197,7 +198,7 @@ export default function App() {
         const b = JSON.parse(reader.result);
         if (b.app !== "FirstLink Register" || b.schemaVersion !== 2 || !validData(b.data)) throw new Error("This is not a valid FirstLink V2 backup.");
         if (!window.confirm("Restore this backup? Current V2 records will be replaced.")) return;
-        setStorageError(""); setDb(b.data); setNotice("Backup restored.");
+        setStorageError(""); setDb(b.data); setPolicyDraft(normalizeLendingPolicy(b.data.settings)); setNotice("Backup restored.");
       } catch(e) { setNotice(e.message); }
     };
     reader.readAsText(file);
