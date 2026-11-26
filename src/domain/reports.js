@@ -9,7 +9,7 @@ const safeCell = value => {
 };
 const sum = (rows, key) => rows.reduce((n, row) => n + Number(row[key] || 0), 0);
 const within = (date, from, to) => String(date || "") >= from && String(date || "") <= to;
-const validDate = value => { if (!/^\\d{4}-\\d{2}-\\d{2}$/.test(String(value || ""))) return false; const parsed = new Date(value + "T00:00:00Z"); return Number.isFinite(parsed.getTime()) && parsed.toISOString().slice(0,10) === value; };
+const validDate = value => { if (typeof value !== "string" || value.length !== 10) return false; const parsed = new Date(value + "T00:00:00Z"); return Number.isFinite(parsed.getTime()) && parsed.toISOString().slice(0,10) === value; };
 
 export function toCsv(headers, rows) {
   return "\uFEFF" + [headers, ...rows].map(row => row.map(safeCell).join(",")).join("\r\n");
@@ -52,7 +52,7 @@ export function buildReportSummary(db, today = new Date()) {
 }
 
 export function buildPeriodReport(db, from, to) {
-  if (!/^\d{4}-\d{2}-\d{2}$/.test(from) || !/^\d{4}-\d{2}-\d{2}$/.test(to) || from > to) throw new Error("Choose a valid reporting date range.");
+  if (!validDate(from) || !validDate(to) || from > to) throw new Error("Choose a valid reporting date range.");
   const rows=buildCashbookRows(db).filter(r=>within(r.date,from,to));
   const disbursements=rows.filter(r=>r.type==="Loan issued");
   const receipts=rows.filter(r=>r.type==="Repayment" || r.type==="Repayment (later reversed)");
