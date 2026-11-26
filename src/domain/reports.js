@@ -1,4 +1,5 @@
 import { totals, loanStatus, buildCashbookRows, allocateRepayments } from "./loans.js";
+import { auditFinancialIntegrity } from "./reconciliation.js";
 
 const safeCell = value => {
   if (value === null || value === undefined) return "";
@@ -103,6 +104,9 @@ export function reconcileRegister(db) {
     if(!(Number(event.amount)>0))errors.push("Reversal "+event.id+" has an invalid amount.");
   }
   for(const loan of db.loans||[])for(const r of loan.repayments||[])if(r.status==="REVERSED" && !(db.events||[]).some(e=>e.type==="REVERSAL"&&e.repaymentId===r.id))warnings.push("Reversed repayment "+r.id+" has no matching reversal event.");
+  const deepAudit = auditFinancialIntegrity(db);
+  errors.push(...deepAudit.errors);
+  warnings.push(...deepAudit.warnings);
   const summary=buildReportSummary(db);
   const ledger=buildCashbookRows(db);
   const gross= sum(ledger,"cashIn"), reversal=sum(ledger.filter(r=>r.type==="Repayment reversal"),"cashOut");
