@@ -272,3 +272,28 @@ test("reconciliation rejects reversal events with invalid allocations or dates",
   assert.ok(result.errors.some(x=>x.includes("allocation does not equal")));
   assert.ok(result.errors.some(x=>x.includes("invalid reversal date")));
 });
+
+
+test("operating expenses appear as cash outflows without changing loan balances", () => {
+  const db={customers:[{id:"C1",name:"Test"}],collateral:[{id:"A1",customerId:"C1",description:"Phone",status:"PLEDGED"}],loans:[loan()],events:[{id:"EXP1",type:"EXPENSE",on:"2026-11-05",amount:50,category:"Transport",description:"Trip to collect payment",method:"Cash"}]};
+  const rows=buildCashbookRows(db);
+  const expense=rows.find(row=>row.id==="EXP1");
+  assert.equal(expense.type,"Operating expense");
+  assert.equal(expense.cashOut,50);
+  assert.equal(expense.cashIn,0);
+  assert.equal(totals(db.loans[0]).balance,1200);
+  const summary=buildReportSummary(db);
+  assert.equal(summary.operatingExpenses,50);
+  assert.equal(summary.netCashPosition,-1050);
+  const period=buildPeriodReport(db,"2026-11-05","2026-11-05");
+  assert.equal(period.operatingExpenses,50);
+  assert.equal(period.netCashMovement,-50);
+});
+
+test("reconciliation rejects expenses with missing categories, invalid dates or amounts", () => {
+  const db={customers:[],collateral:[],loans:[],events:[{id:"EXP1",type:"EXPENSE",on:"2026-02-30",amount:-5,category:""}]};
+  const result=reconcileRegister(db);
+  assert.ok(result.errors.some(x=>x.includes("invalid amount")));
+  assert.ok(result.errors.some(x=>x.includes("invalid date")));
+  assert.ok(result.errors.some(x=>x.includes("missing a category")));
+});
