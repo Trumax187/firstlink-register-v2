@@ -3,6 +3,7 @@ import assert from "node:assert/strict";
 import { createLoan, totals, recordRepayment, reverseRepayment, renewLoan, canDeleteLoan, allocateRepayments, buildCashbookRows } from "./loans.js";
 import { buildExportDatasets, buildReportSummary, toCsv } from "./reports.js";
 import { DEFAULT_LENDING_POLICY, normalizeLendingPolicy, validateLendingPolicy, loanDraftDefaults } from "./policies.js";
+import { migrateV1Backup } from "./migration.js";
 
 const loan = () => createLoan({ id:"L1", customerId:"C1", collateralId:"A1", principal:1000, mode:"percent", value:20, periodDays:30, issuedOn:"2026-11-01" });
 
@@ -140,4 +141,32 @@ test("lending policy validation accepts valid settings and rejects invalid range
   assert.throws(()=>validateLendingPolicy({forfeitGraceDays:7,defaultInterestMode:"monthly",defaultInterestValue:10,defaultPeriodDays:30}));
   assert.throws(()=>validateLendingPolicy({forfeitGraceDays:7,defaultInterestMode:"fixed",defaultInterestValue:-1,defaultPeriodDays:30}));
   assert.throws(()=>validateLendingPolicy({forfeitGraceDays:7,defaultInterestMode:"fixed",defaultInterestValue:10,defaultPeriodDays:0}));
+});
+
+
+test("V1 migration maps customers, collateral, loan terms and reversals without losing history", () => {
+  const backup={app:"FirstLink",schemaVersion:1,data:{
+    borrowers:[{id:"b1",name:"Test Borrower",phone:"0970000000",nrc:"123456/78/9",area:"Lusaka"}],
+    items:[{id:"c1",borrowerId:"b1",desc:"Laptop",condition:"Good",value:5000,location:"Safe A",status:"held"}],
+    loans:[{id:"l1",borrowerId:"b1",itemId:"c1",principal:1000,interest:{mode:"percent",value:20,periodDays:30},issuedOn:"2026-11-01",dueOn:"2026-12-01",status:"active",renewals:1,charges:[{id:"ch1",kind:"initial",amount:200,on:"2026-11-01",note:"Initial"},{id:"ch2",kind:"renewal",amount:200,on:"2026-11-20",note:"Renewal"}],repayments:[{id:"r2",amount:100,on:"2026-11-10",method:"Cash"}]}],
+    events:[{id:"e1",loanId:"l1",at:"2026-11-05 09:00",text:"Loan issued"},{id:"e2",loanId:"l1",at:"2026-11-21 10:00",type:"repayment_reversal",repaymentId:"r1",amount:50,repaymentOn:"2026-11-15",method:"Mobile money",interest:50,principal:0,text:"Repayment reversed"}]
+  }};
+  const result=migrateV1Backup(backup);
+  assert.equal(result.data.customers[0].id,"b1");
+  assert.equal(result.data.collateral[0].status,"PLEDGED");
+  assert.equal(result.data.loans[0].customerId,"b1");
+  assert.equal(result.data.loans[0].charges[1].kind,"RENEWAL");
+  assert.equal(result.data.loans[0].repayments.find(r=>r.id==="r1").status,"REVERSED");
+  assert.equal(result.data.loans[0].repayments.find(r=>r.id==="r2").status,"POSTED");
+  assert.equal(result.data.events.find(e=>e.id==="e2").type,"REVERSAL");
+  assert.equal(result.sourceSummary.reversals,1);
+  assert.equal(result.targetSummary.reversals,1);
+  assert.equal(result.warnings.length,0);
+});
+
+test("V1 migration stops on broken references and duplicate IDs", () => {
+  const bad={app:"FirstLink",schemaVersion:1,data:{borrowers:[{id:"b1",name:"A"},{id:"b1",name:"B"}],items:[],loans:[],events:[]}};
+  assert.throws(()=>migrateV1Backup(bad),/duplicate ID/);
+  const broken={app:"FirstLink",schemaVersion:1,data:{borrowers:[],items:[],loans:[{id:"l1",borrowerId:"missing",itemId:"missing",principal:100,issuedOn:"2026-11-01",dueOn:"2026-12-01",charges:[],repayments:[]}],events:[]}};
+  assert.throws(()=>migrateV1Backup(broken),/missing borrower/);
 });
