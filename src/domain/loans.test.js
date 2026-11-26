@@ -1,7 +1,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import { createLoan, totals, recordRepayment, reverseRepayment, renewLoan, canDeleteLoan, allocateRepayments, buildCashbookRows } from "./loans.js";
-import { buildExportDatasets, buildReportSummary, toCsv } from "./reports.js";
+import { buildExportDatasets, buildReportSummary, buildPeriodReport, buildPeriodExport, reconcileRegister, toCsv } from "./reports.js";
 import { DEFAULT_LENDING_POLICY, normalizeLendingPolicy, validateLendingPolicy, loanDraftDefaults } from "./policies.js";
 import { migrateV1Backup } from "./migration.js";
 
@@ -171,4 +171,41 @@ test("V1 migration stops on broken references and duplicate IDs", () => {
   assert.throws(()=>migrateV1Backup(broken),/missing borrower/);
   const mismatched={app:"FirstLink",schemaVersion:1,data:{borrowers:[{id:"b1",name:"A"},{id:"b2",name:"B"}],items:[{id:"c1",borrowerId:"b2",desc:"Item",value:100,status:"held"}],loans:[{id:"l1",borrowerId:"b1",itemId:"c1",principal:100,issuedOn:"2026-11-01",dueOn:"2026-12-01",charges:[],repayments:[]}],events:[]}};
   assert.throws(()=>migrateV1Backup(mismatched),/different borrower/);
+});
+
+
+test("period report filters dated cashbook activity and separates reversals", () => {
+  const base=loan();
+  const first=recordRepayment(base,{id:"R1",amount:300,on:"2026-11-05",method:"Cash"});
+  const withLater=recordRepayment(first,{id:"R2",amount:100,on:"2026-12-05",method:"Mobile money"});
+  const reversed=reverseRepayment(withLater,"R1",{reversalId:"REV1",on:"2026-11-06",reason:"Mistake"});
+  const db={customers:[{id:"C1",name:"Test"}],collateral:[{id:"A1",description:"Phone",estimatedValue:500,status:"PLEDGED"}],loans:[reversed],events:[{id:"EV1",type:"REVERSAL",loanId:"L1",repaymentId:"R1",amount:300,interest:200,principal:100,on:"2026-11-06",reason:"Mistake"}]};
+  const report=buildPeriodReport(db,"2026-11-01","2026-11-30");
+  assert.equal(report.loansIssued,1);
+  assert.equal(report.principalDisbursed,1000);
+  assert.equal(report.repaymentsReceived,0);
+  assert.equal(report.reversedReceipts,300);
+  assert.equal(report.netCollections,-300);
+  assert.equal(report.interestCharged,200);
+  assert.equal(report.transactionCount,4);
+  assert.equal(buildPeriodExport(report).rows.length,4);
+  assert.throws(()=>buildPeriodReport(db,"2026-12-01","2026-11-01"),/valid reporting date range/);
+});
+
+test("register reconciliation detects missing links and orphaned reversal references", () => {
+  const db={customers:[],collateral:[],loans:[{...loan(),customerId:"MISSING"}],events:[{id:"REV",type:"REVERSAL",loanId:"L1",repaymentId:"NOPE",amount:20}]};
+  const result=reconcileRegister(db);
+  assert.equal(result.ok,false);
+  assert.ok(result.errors.some(x=>x.includes("missing customer")));
+  assert.ok(result.errors.some(x=>x.includes("missing collateral")));
+  assert.ok(result.errors.some(x=>x.includes("missing repayment")));
+});
+
+test("register reconciliation passes a consistent clean register", () => {
+  const paid=recordRepayment(loan(),{id:"R1",amount:100,on:"2026-11-05",method:"Cash"});
+  const db={customers:[{id:"C1",name:"Test"}],collateral:[{id:"A1",customerId:"C1",description:"Phone",estimatedValue:500,status:"PLEDGED"}],loans:[paid],events:[]};
+  const result=reconcileRegister(db);
+  assert.equal(result.ok,true);
+  assert.equal(result.errors.length,0);
+  assert.equal(result.warnings.length,0);
 });
