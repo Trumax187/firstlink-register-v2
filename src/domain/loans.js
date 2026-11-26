@@ -96,7 +96,7 @@ export function renewLoan(loan, { chargeId, on }) {
   const amount = interestCharge(loan.principal, loan.interest);
   const next = loan.renewals + 1;
   return {
-    ...loan, renewals: next, dueOn: addDays(loan.dueOn, loan.interest.periodDays),
+    ...loan, renewals: next, dueOn: addDays(on, loan.interest.periodDays),
     charges: [...loan.charges, { id: chargeId, kind: "RENEWAL", amount, on, note: "Renewal " + next }]
   };
 }
