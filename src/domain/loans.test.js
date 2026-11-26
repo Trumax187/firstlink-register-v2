@@ -331,3 +331,35 @@ test("reconciliation rejects unmatched and duplicate expense reversals", () => {
   assert.ok(result.errors.some(x=>x.includes("more than one reversal")));
   assert.ok(result.errors.some(x=>x.includes("missing expense")));
 });
+
+
+test("V1 migration marks an existing reversed repayment instead of duplicating it", () => {
+  const backup={app:"FirstLink",schemaVersion:1,data:{
+    borrowers:[{id:"b1",name:"Test"}],
+    items:[{id:"c1",borrowerId:"b1",desc:"Phone",value:500,status:"held"}],
+    loans:[{id:"l1",borrowerId:"b1",itemId:"c1",principal:100,interest:{mode:"fixed",value:10,periodDays:30},issuedOn:"2026-11-01",dueOn:"2026-12-01",status:"active",charges:[{id:"ch1",amount:10,on:"2026-11-01"}],repayments:[{id:"r1",amount:20,on:"2026-11-05",method:"Cash"}]}],
+    events:[{id:"ev1",type:"repayment_reversal",loanId:"l1",repaymentId:"r1",amount:20,repaymentOn:"2026-11-05",at:"2026-11-06 10:00",method:"Cash",text:"Reversed"}]
+  }};
+  const result=migrateV1Backup(backup);
+  assert.equal(result.data.loans[0].repayments.length,1);
+  assert.equal(result.data.loans[0].repayments[0].status,"REVERSED");
+  assert.equal(result.targetSummary.repayments,1);
+  assert.equal(result.targetSummary.reversals,1);
+  assert.equal(result.sourceSummary.repayments,1);
+  assert.equal(result.sourceSummary.postedRepayments,0);
+});
+
+test("V1 migration rejects impossible dates and mismatched reversal amounts", () => {
+  const base={app:"FirstLink",schemaVersion:1,data:{
+    borrowers:[{id:"b1",name:"Test"}],
+    items:[{id:"c1",borrowerId:"b1",desc:"Phone",value:500,status:"held"}],
+    loans:[{id:"l1",borrowerId:"b1",itemId:"c1",principal:100,interest:{mode:"fixed",value:10,periodDays:30},issuedOn:"2026-02-30",dueOn:"2026-12-01",status:"active",charges:[],repayments:[]}],
+    events:[]
+  }};
+  assert.throws(()=>migrateV1Backup(base),/invalid issue or due date/);
+  const mismatch=structuredClone(base);
+  mismatch.data.loans[0].issuedOn="2026-11-01";
+  mismatch.data.loans[0].repayments=[{id:"r1",amount:20,on:"2026-11-05",method:"Cash"}];
+  mismatch.data.events=[{id:"ev1",type:"repayment_reversal",loanId:"l1",repaymentId:"r1",amount:19,repaymentOn:"2026-11-05",at:"2026-11-06"}];
+  assert.throws(()=>migrateV1Backup(mismatch),/does not match the original repayment amount/);
+});
