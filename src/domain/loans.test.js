@@ -1,6 +1,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import { createLoan, totals, recordRepayment, reverseRepayment, renewLoan, canDeleteLoan, allocateRepayments, buildCashbookRows } from "./loans.js";
+import { buildExportDatasets, buildReportSummary, toCsv } from "./reports.js";
 
 const loan = () => createLoan({ id:"L1", customerId:"C1", collateralId:"A1", principal:1000, mode:"percent", value:20, periodDays:30, issuedOn:"2026-11-01" });
 
@@ -96,4 +97,26 @@ test("cashbook includes disbursement, interest charges, repayment and reversal s
   assert.equal(rows.find(x=>x.type==="Interest charged").charged,200);
   assert.equal(rows.find(x=>x.type==="Repayment (later reversed)").cashIn,300);
   assert.equal(rows.find(x=>x.type==="Repayment reversal").cashOut,300);
+});
+
+
+test("CSV exports include the register datasets and escape spreadsheet formulas", () => {
+  const value=loan();
+  const db={customers:[{id:"C1",name:"=1+1",phone:"0970000000"}],collateral:[{id:"A1",description:"Phone",estimatedValue:500,status:"PLEDGED"}],loans:[value],events:[]};
+  const exports=buildExportDatasets(db,new Date("2026-11-15T00:00:00"));
+  assert.deepEqual(Object.keys(exports),["customers","collateral","loans","repayments","cashbook"]);
+  assert.match(toCsv(exports.customers.headers,exports.customers.rows),/'=1\+1/);
+  assert.equal(exports.loans.rows[0][8],1200);
+});
+
+test("portfolio report separates principal, charges, cash and reversals", () => {
+  const value=recordRepayment(loan(),{id:"R1",amount:300,on:"2026-11-05",method:"Cash"});
+  const db={customers:[{id:"C1",name:"Test"}],collateral:[{id:"A1",description:"Phone",estimatedValue:500,status:"PLEDGED"}],loans:[value],events:[]};
+  const report=buildReportSummary(db,new Date("2026-11-15T00:00:00"));
+  assert.equal(report.principalOutstanding,900);
+  assert.equal(report.outstanding,900);
+  assert.equal(report.interestCharged,200);
+  assert.equal(report.cashDisbursed,1000);
+  assert.equal(report.cashReceived,300);
+  assert.equal(report.collateralValue,500);
 });
