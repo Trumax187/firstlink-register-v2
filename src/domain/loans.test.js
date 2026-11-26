@@ -209,3 +209,43 @@ test("register reconciliation passes a consistent clean register", () => {
   assert.equal(result.errors.length,0);
   assert.equal(result.warnings.length,0);
 });
+
+
+test("reconciliation detects a posted repayment that has a reversal event", () => {
+  const paid=recordRepayment(loan(),{id:"R1",amount:100,on:"2026-11-05",method:"Cash"});
+  const db={customers:[{id:"C1",name:"Test"}],collateral:[{id:"A1",customerId:"C1",description:"Phone",status:"PLEDGED"}],loans:[paid],events:[{id:"REV1",type:"REVERSAL",loanId:"L1",repaymentId:"R1",amount:100,interest:100,principal:0,on:"2026-11-06"}]};
+  const result=reconcileRegister(db);
+  assert.ok(result.errors.some(x=>x.includes("still marked POSTED")));
+});
+
+test("reconciliation detects reversal amount and allocation mismatches", () => {
+  const paid=reverseRepayment(recordRepayment(loan(),{id:"R1",amount:100,on:"2026-11-05",method:"Cash"}),"R1",{reversalId:"REV1",on:"2026-11-06",reason:"Mistake"});
+  const db={customers:[{id:"C1",name:"Test"}],collateral:[{id:"A1",customerId:"C1",description:"Phone",status:"PLEDGED"}],loans:[paid],events:[{id:"REV1",type:"REVERSAL",loanId:"L1",repaymentId:"R1",amount:90,interest:80,principal:5,on:"2026-11-06"}]};
+  const result=reconcileRegister(db);
+  assert.ok(result.errors.some(x=>x.includes("does not match the original payment amount")));
+  assert.ok(result.errors.some(x=>x.includes("allocation that does not equal")));
+});
+
+test("reconciliation detects duplicate charge IDs and invalid financial dates", () => {
+  const value=loan();
+  value.charges.push({...value.charges[0],amount:50,on:"2026-10-31"});
+  const db={customers:[{id:"C1",name:"Test"}],collateral:[{id:"A1",customerId:"C1",description:"Phone",status:"PLEDGED"}],loans:[value],events:[]};
+  const result=reconcileRegister(db);
+  assert.ok(result.errors.some(x=>x.includes("duplicate charge ID")));
+  assert.ok(result.errors.some(x=>x.includes("predates its loan")));
+});
+
+test("reconciliation prevents one collateral item securing multiple outstanding loans", () => {
+  const first=loan();
+  const second={...loan(),id:"L2",charges:[{id:"L2-CH1",kind:"INITIAL",amount:100,on:"2026-11-01"}]};
+  const db={customers:[{id:"C1",name:"Test"}],collateral:[{id:"A1",customerId:"C1",description:"Phone",status:"PLEDGED"}],loans:[first,second],events:[]};
+  const result=reconcileRegister(db);
+  assert.ok(result.errors.some(x=>x.includes("more than one outstanding loan")));
+});
+
+test("reconciliation accepts a valid reversed repayment with matching audit event", () => {
+  const reversed=reverseRepayment(recordRepayment(loan(),{id:"R1",amount:100,on:"2026-11-05",method:"Cash"}),"R1",{reversalId:"REV1",on:"2026-11-06",reason:"Mistake"});
+  const db={customers:[{id:"C1",name:"Test"}],collateral:[{id:"A1",customerId:"C1",description:"Phone",status:"PLEDGED"}],loans:[reversed],events:[{id:"REV1",type:"REVERSAL",loanId:"L1",repaymentId:"R1",amount:100,interest:100,principal:0,on:"2026-11-06"}]};
+  const result=reconcileRegister(db);
+  assert.equal(result.ok,true);
+});
