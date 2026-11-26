@@ -12,9 +12,10 @@ The selected-period report is built from dated cashbook rows:
 - Net collections: gross receipts less reversals in the selected period.
 - Interest charged: interest accrued in the period; this is not the same as interest cash collected.
 - Interest collected and principal collected: repayment allocation less reversal allocation dated in the selected period.
-- Net cash movement: receipts less reversals and principal disbursements.
+- Operating expenses: separately recorded cash outflows, categorized by type and payment method.
+- Net cash movement: receipts less reversals, principal disbursements and recorded operating expenses.
 
-Net cash movement is not profit. Operating expenses, owner deposits, owner withdrawals, fees and bank charges are not yet recorded in FirstLink, so they are excluded.
+Net cash movement is not profit. Owner deposits, owner withdrawals, transfers, opening balances and other non-loan cash movements are not yet recorded. Expenses are recorded, but this is still not a full double-entry accounting ledger or a verified till/bank balance.
 
 ## Reconciliation checks
 
@@ -28,7 +29,7 @@ The Settings > Register reconciliation panel runs structural and financial check
 - Reversal amount and interest/principal allocation must reconcile to the original repayment amount.
 - Reversed repayments without an event are surfaced by the existing warning check.
 - One collateral item cannot secure multiple outstanding loans.
-- Customer/collateral ownership, collateral status and portfolio/cashbook summary checks.
+- Customer/collateral ownership, collateral status, expense amount/category/date and portfolio/cashbook summary checks.
 
 ## What the checks cannot prove
 
