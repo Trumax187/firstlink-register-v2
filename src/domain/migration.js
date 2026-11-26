@@ -25,9 +25,11 @@ export function migrateV1Backup(backup) {
   const borrowerIds = new Set(source.borrowers.map(x => x.id));
   const itemIds = new Set(source.items.map(x => x.id));
   const loanIds = new Set(source.loans.map(x => x.id));
+  for (const item of source.items) if (!borrowerIds.has(item.borrowerId)) errors.push("Collateral " + item.id + " refers to missing borrower " + item.borrowerId + ".");
   for (const loan of source.loans) {
     if (!borrowerIds.has(loan.borrowerId)) errors.push("Loan " + loan.id + " refers to missing borrower " + loan.borrowerId + ".");
     if (!itemIds.has(loan.itemId)) errors.push("Loan " + loan.id + " refers to missing collateral " + loan.itemId + ".");
+    else if (source.items.find(item=>item.id===loan.itemId)?.borrowerId !== loan.borrowerId) errors.push("Loan " + loan.id + " links a collateral item belonging to a different borrower.");
     if (!(Number(loan.principal) > 0) || !Number.isFinite(Number(loan.principal))) errors.push("Loan " + loan.id + " has an invalid principal.");
     if (!validDate(loan.issuedOn) || !validDate(loan.dueOn)) errors.push("Loan " + loan.id + " has an invalid issue or due date.");
     if (!Array.isArray(loan.charges) || !Array.isArray(loan.repayments)) errors.push("Loan " + loan.id + " is missing charges or repayments.");
@@ -64,8 +66,9 @@ export function migrateV1Backup(backup) {
     const open = linked.some(l => !["cleared","forfeited"].includes(String(l.status || "").toLowerCase()) && linkedBalance(l) > 0);
     let status;
     if (String(item.status).toLowerCase() === "forfeited" || linked.some(l => String(l.status).toLowerCase() === "forfeited")) status = "FORFEITED";
+    else if (open) { status = "PLEDGED"; if (String(item.status).toLowerCase() === "released") warnings.push("Collateral " + item.id + " was marked released in V1 despite an outstanding loan; it was mapped to PLEDGED."); }
     else if (String(item.status).toLowerCase() === "released") status = "RELEASED";
-    else status = open ? "PLEDGED" : "AVAILABLE";
+    else status = "AVAILABLE";
     if (String(item.status).toLowerCase() === "held" && !open) warnings.push("Collateral " + item.id + " was marked held in V1 but has no open loan; it was mapped to AVAILABLE.");
     return { id:item.id, customerId:item.borrowerId, description:item.desc || "Unspecified collateral", condition:item.condition || "", estimatedValue:Number(item.value || 0), location:item.location || "", status, createdAt:item.createdAt || null };
   });
