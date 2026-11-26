@@ -9,6 +9,7 @@ const safeCell = value => {
 };
 const sum = (rows, key) => rows.reduce((n, row) => n + Number(row[key] || 0), 0);
 const within = (date, from, to) => String(date || "") >= from && String(date || "") <= to;
+const validDate = value => { if (!/^\\d{4}-\\d{2}-\\d{2}$/.test(String(value || ""))) return false; const parsed = new Date(value + "T00:00:00Z"); return Number.isFinite(parsed.getTime()) && parsed.toISOString().slice(0,10) === value; };
 
 export function toCsv(headers, rows) {
   return "\uFEFF" + [headers, ...rows].map(row => row.map(safeCell).join(",")).join("\r\n");
