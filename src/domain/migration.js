@@ -117,11 +117,11 @@ export function migrateV1Backup(backup) {
   const data = { customers, collateral, loans, events, settings:{...DEFAULT_LENDING_POLICY} };
   const sourceSummary = {
     customers:customers.length,collateral:collateral.length,loans:loans.length,
-    repayments:source.loans.reduce((n,l)=>n+l.repayments.length,0)+reversalEvents.length,
+    repayments:new Set([...source.loans.flatMap(l=>l.repayments.map(r=>r.id)),...reversalEvents.map(e=>e.repaymentId)]).size,
     reversals:reversalEvents.length,events:source.events.length,
     totalPrincipal:sum(source.loans,"principal"),
     totalCharges:source.loans.reduce((n,l)=>n+sum(l.charges,"amount"),0),
-    postedRepayments:source.loans.reduce((n,l)=>n+sum(l.repayments,"amount"),0)
+    postedRepayments:source.loans.reduce((n,l)=>n+sum(l.repayments.filter(r=>!reversedIds.has(r.id)),"amount"),0)
   };
   const targetSummary = {
     customers:data.customers.length,collateral:data.collateral.length,loans:data.loans.length,
