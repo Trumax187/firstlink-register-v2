@@ -2,7 +2,7 @@ import { DEFAULT_LENDING_POLICY } from "./policies.js";
 import { totals } from "./loans.js";
 
 const dateOnly = value => String(value || "").slice(0, 10);
-const validDate = value => /^\d{4}-\d{2}-\d{2}$/.test(String(value || ""));
+const validDate = value => { if (typeof value !== "string" || !/^\d{4}-\d{2}-\d{2}$/.test(value)) return false; const date = new Date(value + "T00:00:00Z"); return Number.isFinite(date.getTime()) && date.toISOString().slice(0,10) === value; };
 const sum = (items, field) => (items || []).reduce((n, x) => n + Number(x?.[field] || 0), 0);
 
 function assertUnique(records, label, errors) {
