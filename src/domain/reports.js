@@ -40,7 +40,8 @@ export function buildReportSummary(db, today = new Date()) {
     principalOutstanding:active.reduce((sum,l)=>sum+Math.max(0,l.principal-allocateRepayments(l).reduce((paid,r)=>paid+r.principal,0)),0),
     outstanding:active.reduce((sum,l)=>sum+Math.max(0,totals(l).balance),0),
     interestCharged:loans.reduce((sum,l)=>sum+totals(l).charges,0),
-    cashDisbursed:cashbook.reduce((sum,r)=>sum+(r.cashOut||0),0),
+    cashDisbursed:cashbook.filter(r=>r.type==="Loan issued").reduce((sum,r)=>sum+(r.cashOut||0),0),
+    cashReversed:cashbook.filter(r=>r.type==="Repayment reversal").reduce((sum,r)=>sum+(r.cashOut||0),0),
     cashReceived:cashbook.reduce((sum,r)=>sum+(r.cashIn||0),0),
     collateralValue:(db.collateral||[]).filter(a=>a.status==="PLEDGED").reduce((sum,a)=>sum+Number(a.estimatedValue||0),0)
   };
