@@ -26,13 +26,28 @@ export function migrateV1Backup(backup) {
   const itemIds = new Set(source.items.map(x => x.id));
   const loanIds = new Set(source.loans.map(x => x.id));
   for (const item of source.items) if (!borrowerIds.has(item.borrowerId)) errors.push("Collateral " + item.id + " refers to missing borrower " + item.borrowerId + ".");
+  const sourceChargeIds = new Set();
+  const sourceRepaymentIds = new Set();
   for (const loan of source.loans) {
     if (!borrowerIds.has(loan.borrowerId)) errors.push("Loan " + loan.id + " refers to missing borrower " + loan.borrowerId + ".");
     if (!itemIds.has(loan.itemId)) errors.push("Loan " + loan.id + " refers to missing collateral " + loan.itemId + ".");
     else if (source.items.find(item=>item.id===loan.itemId)?.borrowerId !== loan.borrowerId) errors.push("Loan " + loan.id + " links a collateral item belonging to a different borrower.");
     if (!(Number(loan.principal) > 0) || !Number.isFinite(Number(loan.principal))) errors.push("Loan " + loan.id + " has an invalid principal.");
-    if (!validDate(loan.issuedOn) || !validDate(loan.dueOn)) errors.push("Loan " + loan.id + " has an invalid issue or due date.");
-    if (!Array.isArray(loan.charges) || !Array.isArray(loan.repayments)) errors.push("Loan " + loan.id + " is missing charges or repayments.");
+    if (!validDate(loan.issuedOn) || !validDate(loan.dueOn) || (validDate(loan.issuedOn) && validDate(loan.dueOn) && loan.dueOn < loan.issuedOn)) errors.push("Loan " + loan.id + " has an invalid issue or due date.");
+    if (!Array.isArray(loan.charges) || !Array.isArray(loan.repayments)) {
+      errors.push("Loan " + loan.id + " is missing charges or repayments.");
+      continue;
+    }
+    for (const charge of loan.charges) {
+      if (!charge?.id || sourceChargeIds.has(charge.id)) errors.push("V1 contains a missing or duplicate charge ID " + (charge?.id || "(missing)") + ".");
+      if (charge?.id) sourceChargeIds.add(charge.id);
+      if (!Number.isFinite(Number(charge?.amount)) || Number(charge.amount) < 0 || !validDate(charge?.on)) errors.push("Loan " + loan.id + " has a charge with an invalid amount or date.");
+    }
+    for (const repayment of loan.repayments) {
+      if (!repayment?.id || sourceRepaymentIds.has(repayment.id)) errors.push("V1 contains a missing or duplicate repayment ID " + (repayment?.id || "(missing)") + ".");
+      if (repayment?.id) sourceRepaymentIds.add(repayment.id);
+      if (!(Number(repayment?.amount) > 0) || !Number.isFinite(Number(repayment.amount)) || !validDate(repayment?.on)) errors.push("Loan " + loan.id + " has a repayment with an invalid amount or date.");
+    }
   }
   if (errors.length) throw new Error("V1 migration stopped: " + errors.join(" "));
 
