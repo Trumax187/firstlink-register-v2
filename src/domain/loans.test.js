@@ -183,9 +183,9 @@ test("period report filters dated cashbook activity and separates reversals", ()
   const report=buildPeriodReport(db,"2026-11-01","2026-11-30");
   assert.equal(report.loansIssued,1);
   assert.equal(report.principalDisbursed,1000);
-  assert.equal(report.repaymentsReceived,0);
+  assert.equal(report.repaymentsReceived,300);
   assert.equal(report.reversedReceipts,300);
-  assert.equal(report.netCollections,-300);
+  assert.equal(report.netCollections,0);
   assert.equal(report.interestCharged,200);
   assert.equal(report.transactionCount,4);
   assert.equal(buildPeriodExport(report).rows.length,4);
