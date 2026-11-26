@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { createLoan, totals, recordRepayment, reverseRepayment, renewLoan, canDeleteLoan, allocateRepayments } from "./loans.js";
+import { createLoan, totals, recordRepayment, reverseRepayment, renewLoan, canDeleteLoan, allocateRepayments, buildCashbookRows } from "./loans.js";
 
 const loan = () => createLoan({ id:"L1", customerId:"C1", collateralId:"A1", principal:1000, mode:"percent", value:20, periodDays:30, issuedOn:"2026-11-01" });
 
@@ -77,4 +77,23 @@ test("reversed repayments are excluded from allocation", () => {
   assert.equal(rows[0].id,"R2");
   assert.equal(rows[0].interest,200);
   assert.equal(rows[0].principal,50);
+});
+
+
+test("cashbook includes disbursement, interest charges, repayment and reversal separately", () => {
+  const original = loan();
+  const paid = recordRepayment(original, {id:"R1",amount:300,on:"2026-11-05",method:"Cash"});
+  const reversed = reverseRepayment(paid,"R1",{reversalId:"REV1",on:"2026-11-06",reason:"Mistake"});
+  const db = {
+    customers:[{id:"C1",name:"Test Customer"}],
+    collateral:[{id:"A1",description:"Test phone"}],
+    loans:[reversed],
+    events:[{id:"EV1",type:"REVERSAL",loanId:"L1",repaymentId:"R1",amount:300,interest:200,principal:100,on:"2026-11-06",reason:"Mistake"}]
+  };
+  const rows = buildCashbookRows(db);
+  assert.equal(rows.length,4);
+  assert.equal(rows.find(x=>x.type==="Loan issued").cashOut,1000);
+  assert.equal(rows.find(x=>x.type==="Interest charged").charged,200);
+  assert.equal(rows.find(x=>x.type==="Repayment (later reversed)").cashIn,300);
+  assert.equal(rows.find(x=>x.type==="Repayment reversal").cashOut,300);
 });
