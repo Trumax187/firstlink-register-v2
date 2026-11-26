@@ -363,3 +363,14 @@ test("V1 migration rejects impossible dates and mismatched reversal amounts", ()
   mismatch.data.events=[{id:"ev1",type:"repayment_reversal",loanId:"l1",repaymentId:"r1",amount:19,repaymentOn:"2026-11-05",at:"2026-11-06"}];
   assert.throws(()=>migrateV1Backup(mismatch),/does not match the original repayment amount/);
 });
+
+
+test("V1 migration rejects malformed charge and repayment records", () => {
+  const backup={app:"FirstLink",schemaVersion:1,data:{
+    borrowers:[{id:"b1",name:"Test"}],
+    items:[{id:"c1",borrowerId:"b1",desc:"Phone",value:500,status:"held"}],
+    loans:[{id:"l1",borrowerId:"b1",itemId:"c1",principal:100,interest:{mode:"fixed",value:10,periodDays:30},issuedOn:"2026-11-01",dueOn:"2026-12-01",status:"active",charges:[{id:"ch1",amount:-10,on:"2026-11-01"}],repayments:[{id:"r1",amount:20,on:"2026-02-30",method:"Cash"}]}],
+    events:[]
+  }};
+  assert.throws(()=>migrateV1Backup(backup),/invalid amount or date/);
+});
