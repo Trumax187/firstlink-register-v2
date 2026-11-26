@@ -2,6 +2,7 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import { createLoan, totals, recordRepayment, reverseRepayment, renewLoan, canDeleteLoan, allocateRepayments, buildCashbookRows } from "./loans.js";
 import { buildExportDatasets, buildReportSummary, toCsv } from "./reports.js";
+import { DEFAULT_LENDING_POLICY, normalizeLendingPolicy, validateLendingPolicy, loanDraftDefaults } from "./policies.js";
 
 const loan = () => createLoan({ id:"L1", customerId:"C1", collateralId:"A1", principal:1000, mode:"percent", value:20, periodDays:30, issuedOn:"2026-11-01" });
 
@@ -119,4 +120,24 @@ test("portfolio report separates principal, charges, cash and reversals", () => 
   assert.equal(report.cashDisbursed,1000);
   assert.equal(report.cashReceived,300);
   assert.equal(report.collateralValue,500);
+});
+
+
+test("renewing an overdue loan starts the new term on the renewal date", () => {
+  const renewed=renewLoan(loan(),{chargeId:"CH2",on:"2026-12-10"});
+  assert.equal(renewed.dueOn,"2027-01-09");
+  assert.equal(renewed.charges.at(-1).on,"2026-12-10");
+});
+
+test("lending policy defaults are normalized for older register data", () => {
+  assert.deepEqual(normalizeLendingPolicy({forfeitGraceDays:10}),{...DEFAULT_LENDING_POLICY,forfeitGraceDays:10});
+  assert.deepEqual(loanDraftDefaults({defaultInterestMode:"fixed",defaultInterestValue:75,defaultPeriodDays:14}),{mode:"fixed",interestValue:"75",periodDays:"14"});
+});
+
+test("lending policy validation accepts valid settings and rejects invalid ranges", () => {
+  assert.deepEqual(validateLendingPolicy({forfeitGraceDays:0,defaultInterestMode:"percent",defaultInterestValue:12.5,defaultPeriodDays:30}),{forfeitGraceDays:0,defaultInterestMode:"percent",defaultInterestValue:12.5,defaultPeriodDays:30});
+  assert.throws(()=>validateLendingPolicy({forfeitGraceDays:-1,defaultInterestMode:"percent",defaultInterestValue:10,defaultPeriodDays:30}));
+  assert.throws(()=>validateLendingPolicy({forfeitGraceDays:7,defaultInterestMode:"monthly",defaultInterestValue:10,defaultPeriodDays:30}));
+  assert.throws(()=>validateLendingPolicy({forfeitGraceDays:7,defaultInterestMode:"fixed",defaultInterestValue:-1,defaultPeriodDays:30}));
+  assert.throws(()=>validateLendingPolicy({forfeitGraceDays:7,defaultInterestMode:"fixed",defaultInterestValue:10,defaultPeriodDays:0}));
 });
