@@ -255,3 +255,20 @@ test("period report rejects impossible calendar dates", () => {
   assert.throws(()=>buildPeriodReport(db,"2026-02-30","2026-03-01"),/valid reporting date range/);
   assert.throws(()=>buildPeriodReport(db,"2026-11-01","2026-13-01"),/valid reporting date range/);
 });
+
+
+test("reconciliation detects duplicate charge IDs across different loans", () => {
+  const first=loan();
+  const second={...loan(),id:"L2",charges:[{...first.charges[0]}]};
+  const db={customers:[{id:"C1",name:"Test"}],collateral:[{id:"A1",customerId:"C1",description:"Phone",status:"PLEDGED"},{id:"A2",customerId:"C1",description:"Laptop",status:"PLEDGED"}],loans:[first,{...second,collateralId:"A2"}],events:[]};
+  const result=reconcileRegister(db);
+  assert.ok(result.errors.some(x=>x.includes("duplicate charge ID")));
+});
+
+test("reconciliation rejects reversal events with invalid allocations or dates", () => {
+  const reversed=reverseRepayment(recordRepayment(loan(),{id:"R1",amount:100,on:"2026-11-05",method:"Cash"}),"R1",{reversalId:"REV1",on:"2026-11-06",reason:"Mistake"});
+  const db={customers:[{id:"C1",name:"Test"}],collateral:[{id:"A1",customerId:"C1",description:"Phone",status:"PLEDGED"}],loans:[reversed],events:[{id:"REV1",type:"REVERSAL",loanId:"L1",repaymentId:"R1",amount:100,interest:80,principal:10,on:"2026-02-30"}]};
+  const result=reconcileRegister(db);
+  assert.ok(result.errors.some(x=>x.includes("allocation does not equal")));
+  assert.ok(result.errors.some(x=>x.includes("invalid reversal date")));
+});
