@@ -37,9 +37,11 @@ export function buildReportSummary(db, today = new Date()) {
   const cashbook=buildCashbookRows(db);
   const loans=db.loans || [];
   const active=loans.filter(l=>["ACTIVE","OVERDUE"].includes(loanStatus(l,today)));
-  const cashReceived=sum(cashbook,"cashIn");
+  const cashReceived=sum(cashbook.filter(r=>r.type==="Repayment" || r.type==="Repayment (later reversed)"),"cashIn");
   const cashReversed=sum(cashbook.filter(r=>r.type==="Repayment reversal"),"cashOut");
-  const operatingExpenses=sum(cashbook.filter(r=>r.type==="Operating expense"),"cashOut");
+  const grossExpenses=sum(cashbook.filter(r=>r.type==="Operating expense"),"cashOut");
+  const expenseRefunds=sum(cashbook.filter(r=>r.type==="Expense reversal"),"cashIn");
+  const operatingExpenses=grossExpenses-expenseRefunds;
   return {
     totalLoans:loans.length, activeLoans:active.length,
     overdueLoans:loans.filter(l=>loanStatus(l,today)==="OVERDUE").length,
@@ -48,7 +50,7 @@ export function buildReportSummary(db, today = new Date()) {
     interestCharged:sum(cashbook,"charged"),
     cashDisbursed:sum(cashbook.filter(r=>r.type==="Loan issued"),"cashOut"),
     cashReceived,cashReversed,netCashReceived:cashReceived-cashReversed,
-    operatingExpenses,netCashPosition:cashReceived-cashReversed-sum(cashbook.filter(r=>r.type==="Loan issued"),"cashOut")-operatingExpenses,
+    operatingExpenses,expenseRefunds,netCashPosition:cashReceived-cashReversed-sum(cashbook.filter(r=>r.type==="Loan issued"),"cashOut")-grossExpenses+expenseRefunds,
     collateralValue:sum((db.collateral||[]).filter(a=>a.status==="PLEDGED"),"estimatedValue")
   };
 }
@@ -61,6 +63,7 @@ export function buildPeriodReport(db, from, to) {
   const reversals=rows.filter(r=>r.type==="Repayment reversal");
   const charges=rows.filter(r=>r.type==="Interest charged" || r.type==="Renewal interest charged");
   const expenses=rows.filter(r=>r.type==="Operating expense");
+  const expenseRefunds=rows.filter(r=>r.type==="Expense reversal");
   const repayments=sum(receipts,"cashIn");
   const reversed=sum(reversals,"cashOut");
   const charged=sum(charges,"charged");
@@ -70,8 +73,9 @@ export function buildPeriodReport(db, from, to) {
     repaymentsReceived:repayments,reversedReceipts:reversed,netCollections:repayments-reversed,
     interestCharged:charged,interestCollected:sum(receipts,"interest")-sum(reversals,"interest"),
     principalCollected:sum(receipts,"principal")-sum(reversals,"principal"),
-    operatingExpenses:sum(expenses,"cashOut"),
-    netCashMovement:repayments-reversed-sum(disbursements,"cashOut")-sum(expenses,"cashOut"),
+    operatingExpenses:sum(expenses,"cashOut")-sum(expenseRefunds,"cashIn"),
+    expenseRefunds:sum(expenseRefunds,"cashIn"),
+    netCashMovement:repayments-reversed-sum(disbursements,"cashOut")-sum(expenses,"cashOut")+sum(expenseRefunds,"cashIn"),
     rows
   };
 }
@@ -108,6 +112,18 @@ export function reconcileRegister(db) {
     if(!validDate(date))errors.push("Expense "+event.id+" has an invalid date.");
     if(!String(event.category||"").trim())errors.push("Expense "+event.id+" is missing a category.");
   }
+  const expenseIds=new Set((db.events||[]).filter(e=>e.type==="EXPENSE").map(e=>e.id));
+  const reversedExpenses=new Set();
+  for(const event of db.events||[])if(event.type==="EXPENSE_REVERSAL"){
+    if(!expenseIds.has(event.expenseId))errors.push("Expense reversal "+event.id+" refers to a missing expense.");
+    if(reversedExpenses.has(event.expenseId))errors.push("Expense "+event.expenseId+" has more than one reversal.");
+    reversedExpenses.add(event.expenseId);
+    const original=(db.events||[]).find(e=>e.id===event.expenseId&&e.type==="EXPENSE");
+    if(!(Number(event.amount)>0)||!Number.isFinite(Number(event.amount)))errors.push("Expense reversal "+event.id+" has an invalid amount.");
+    else if(original&&Math.abs(Number(event.amount)-Number(original.amount))>0.01)errors.push("Expense reversal "+event.id+" does not match the original expense amount.");
+    const date=event.on||String(event.at||"").slice(0,10);
+    if(!validDate(date))errors.push("Expense reversal "+event.id+" has an invalid date.");
+  }
   for(const event of db.events||[])if(event.type==="REVERSAL"){
     if(!loans.has(event.loanId))errors.push("Reversal "+event.id+" refers to a missing loan.");
     if(!repayments.has(event.repaymentId))errors.push("Reversal "+event.id+" refers to a missing repayment.");
@@ -120,7 +136,7 @@ export function reconcileRegister(db) {
   warnings.push(...deepAudit.warnings);
   const summary=buildReportSummary(db);
   const ledger=buildCashbookRows(db);
-  const gross= sum(ledger,"cashIn"), reversal=sum(ledger.filter(r=>r.type==="Repayment reversal"),"cashOut");
+  const gross= sum(ledger.filter(r=>r.type==="Repayment"||r.type==="Repayment (later reversed)"),"cashIn"), reversal=sum(ledger.filter(r=>r.type==="Repayment reversal"),"cashOut");
   if(Math.abs((gross-reversal)-summary.netCashReceived)>0.01)errors.push("Cashbook net collections do not match the portfolio summary.");
   return {ok:errors.length===0,errors,warnings,counts:{customers:(db.customers||[]).length,collateral:(db.collateral||[]).length,loans:(db.loans||[]).length,repayments:repayments.size,events:events.size},financials:{principalOutstanding:summary.principalOutstanding,outstanding:summary.outstanding,netCashReceived:summary.netCashReceived,operatingExpenses:summary.operatingExpenses,netCashPosition:summary.netCashPosition}};
 }
