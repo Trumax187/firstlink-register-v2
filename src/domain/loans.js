@@ -139,6 +139,8 @@ export function buildCashbookRows(db) {
       rows.push({ id: event.id, date: event.on || event.at?.slice(0,10), type: "Repayment reversal", customer: loan ? customerName(loan.customerId) : "Unknown customer", description: event.reason || event.text || "Reversal", cashOut: money(event.amount || 0), cashIn: 0, interest: -money(event.interest || 0), principal: -money(event.principal || 0) });
     } else if (event.type === "EXPENSE") {
       rows.push({ id:event.id, date:event.on || event.at?.slice(0,10), type:"Operating expense", customer:"—", description:[event.category,event.description].filter(Boolean).join(" · ") || "Expense", cashOut:Number.isFinite(Number(event.amount))?money(event.amount):0, cashIn:0, interest:0, principal:0, method:event.method || "Cash" });
+    } else if (event.type === "EXPENSE_REVERSAL") {
+      rows.push({ id:event.id, date:event.on || event.at?.slice(0,10), type:"Expense reversal", customer:"—", description:[event.category,event.reason || "Reversal"].filter(Boolean).join(" · "), cashOut:0, cashIn:Number.isFinite(Number(event.amount))?money(event.amount):0, interest:0, principal:0, method:event.method || "Cash" });
     }
   }
   return rows.filter(x => x.date).sort((a,b) => String(b.date).localeCompare(String(a.date)) || String(a.id).localeCompare(String(b.id)));
