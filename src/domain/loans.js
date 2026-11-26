@@ -20,6 +20,26 @@ export function totals(loan) {
   return { charges: money(charges), repayments: money(repayments), balance: money(loan.principal + charges - repayments) };
 }
 
+// Match the original FirstLink rule: each posted repayment pays charges
+// that existed on its date first, then reduces principal. Reversed receipts
+// remain in history but are excluded from allocation.
+export function allocateRepayments(loan) {
+  const posted = (loan.repayments || [])
+    .filter(item => item.status !== "REVERSED")
+    .slice()
+    .sort((a, b) => String(a.on).localeCompare(String(b.on)) || String(a.id).localeCompare(String(b.id)));
+  let interestPaid = 0;
+  return posted.map(repayment => {
+    const chargesDue = (loan.charges || [])
+      .filter(charge => String(charge.on) <= String(repayment.on))
+      .reduce((sum, charge) => sum + money(charge.amount), 0);
+    const interestOutstanding = Math.max(0, money(chargesDue - interestPaid));
+    const interest = money(Math.min(money(repayment.amount), interestOutstanding));
+    interestPaid = money(interestPaid + interest);
+    return { ...repayment, interest, principal: money(repayment.amount - interest) };
+  });
+}
+
 export function loanStatus(loan, today = new Date()) {
   if (loan.status === "FORFEITED") return "FORFEITED";
   const { balance } = totals(loan);
