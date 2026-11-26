@@ -249,3 +249,9 @@ test("reconciliation accepts a valid reversed repayment with matching audit even
   const result=reconcileRegister(db);
   assert.equal(result.ok,true);
 });
+
+test("period report rejects impossible calendar dates", () => {
+  const db={customers:[],collateral:[],loans:[],events:[]};
+  assert.throws(()=>buildPeriodReport(db,"2026-02-30","2026-03-01"),/valid reporting date range/);
+  assert.throws(()=>buildPeriodReport(db,"2026-11-01","2026-13-01"),/valid reporting date range/);
+});
