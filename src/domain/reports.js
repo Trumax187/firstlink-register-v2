@@ -3,12 +3,12 @@ import { totals, loanStatus, buildCashbookRows, allocateRepayments } from "./loa
 const safeCell = value => {
   if (value === null || value === undefined) return "";
   const raw = String(value);
-  const protectedValue = /^[=+@\t\r]/.test(raw) ? "'" + raw : raw;
+  const protectedValue = typeof value === "string" && /^[=+\-@ \t\r]/.test(raw) ? "'" + raw : raw;
   return '"' + protectedValue.replace(/"/g, '""') + '"';
 };
 
 export function toCsv(headers, rows) {
-  return "\uFEFF" + [headers, ...rows].map(row => row.map(safeCell).join(",")).join("\r\\n");
+  return "\uFEFF" + [headers, ...rows].map(row => row.map(safeCell).join(",")).join("\r\n");
 }
 
 export function buildExportDatasets(db, today = new Date()) {
@@ -33,6 +33,8 @@ export function buildReportSummary(db, today = new Date()) {
   const cashbook=buildCashbookRows(db);
   const loans=db.loans || [];
   const active=loans.filter(l=>["ACTIVE","OVERDUE"].includes(loanStatus(l,today)));
+  const cashReceived=cashbook.reduce((sum,r)=>sum+(r.cashIn||0),0);
+  const cashReversed=cashbook.filter(r=>r.type==="Repayment reversal").reduce((sum,r)=>sum+(r.cashOut||0),0);
   return {
     totalLoans:loans.length,
     activeLoans:active.length,
@@ -41,9 +43,9 @@ export function buildReportSummary(db, today = new Date()) {
     outstanding:active.reduce((sum,l)=>sum+Math.max(0,totals(l).balance),0),
     interestCharged:loans.reduce((sum,l)=>sum+totals(l).charges,0),
     cashDisbursed:cashbook.filter(r=>r.type==="Loan issued").reduce((sum,r)=>sum+(r.cashOut||0),0),
-    cashReversed:cashbook.filter(r=>r.type==="Repayment reversal").reduce((sum,r)=>sum+(r.cashOut||0),0),
-    netCashReceived:cashbook.reduce((sum,r)=>sum+(r.cashIn||0)-(r.cashOut||0),0),
-    cashReceived:cashbook.reduce((sum,r)=>sum+(r.cashIn||0),0),
+    cashReceived,
+    cashReversed,
+    netCashReceived:cashReceived-cashReversed,
     collateralValue:(db.collateral||[]).filter(a=>a.status==="PLEDGED").reduce((sum,a)=>sum+Number(a.estimatedValue||0),0)
   };
 }
