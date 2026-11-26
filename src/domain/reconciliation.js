@@ -11,6 +11,8 @@ export function auditFinancialIntegrity(db) {
   const warnings = [];
   const reversalEvents = (db.events || []).filter(event => event.type === "REVERSAL");
   const reversalsByRepayment = new Map();
+  const chargeIds = new Set();
+  const repaymentIds = new Set();
 
   for (const event of reversalEvents) {
     const list = reversalsByRepayment.get(event.repaymentId) || [];
@@ -23,10 +25,9 @@ export function auditFinancialIntegrity(db) {
     if (!validDate(loan.issuedOn) || !validDate(loan.dueOn)) errors.push("Loan " + loan.id + " has an invalid issue or due date.");
     if (loan.dueOn < loan.issuedOn) errors.push("Loan " + loan.id + " is due before its issue date.");
 
-    const chargeIds = new Set();
     for (const charge of loan.charges || []) {
       if (!charge.id) errors.push("A charge on loan " + loan.id + " is missing an ID.");
-      else if (chargeIds.has(charge.id)) errors.push("Loan " + loan.id + " has duplicate charge ID " + charge.id + ".");
+      else if (chargeIds.has(charge.id)) errors.push("Charge ID " + charge.id + " is used more than once in the register.");
       chargeIds.add(charge.id);
       if (!(amount(charge.amount) >= 0)) errors.push("Charge " + (charge.id || "on loan " + loan.id) + " has an invalid amount.");
       if (!validDate(charge.on)) errors.push("Charge " + (charge.id || "on loan " + loan.id) + " has an invalid date.");
@@ -34,6 +35,10 @@ export function auditFinancialIntegrity(db) {
     }
 
     for (const repayment of loan.repayments || []) {
+      if (!repayment.id) errors.push("A repayment on loan " + loan.id + " is missing an ID.");
+      else if (repaymentIds.has(repayment.id)) errors.push("Repayment ID " + repayment.id + " is used more than once in the register.");
+      repaymentIds.add(repayment.id);
+      if (!(amount(repayment.amount) > 0)) errors.push("Repayment " + repayment.id + " has an invalid amount.");
       if (!validDate(repayment.on)) errors.push("Repayment " + repayment.id + " has an invalid date.");
       if (validDate(repayment.on) && validDate(loan.issuedOn) && repayment.on < loan.issuedOn) errors.push("Repayment " + repayment.id + " predates its loan.");
       if (!["POSTED", "REVERSED"].includes(repayment.status)) errors.push("Repayment " + repayment.id + " has an unknown status.");
@@ -50,6 +55,16 @@ export function auditFinancialIntegrity(db) {
         if (!validDate(reversalDate)) errors.push("Reversal for repayment " + repayment.id + " has an invalid reversal date.");
       }
     }
+  }
+
+  for (const event of reversalEvents) {
+    if (!(amount(event.amount) > 0)) errors.push("Reversal event " + event.id + " has an invalid amount.");
+    const interest = amount(event.interest ?? 0);
+    const principal = amount(event.principal ?? NaN);
+    if (!(interest >= 0) || !(principal >= 0)) errors.push("Reversal event " + event.id + " has an invalid interest/principal allocation.");
+    else if (!close(interest + principal, event.amount)) errors.push("Reversal event " + event.id + " allocation does not equal its amount.");
+    const reversalDate = event.on || String(event.at || "").slice(0, 10);
+    if (!validDate(reversalDate)) errors.push("Reversal event " + event.id + " has an invalid reversal date.");
   }
 
   for (const [repaymentId, events] of reversalsByRepayment) {
