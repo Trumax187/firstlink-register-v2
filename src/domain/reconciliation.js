@@ -27,7 +27,7 @@ export function auditFinancialIntegrity(db) {
 
     for (const charge of loan.charges || []) {
       if (!charge.id) errors.push("A charge on loan " + loan.id + " is missing an ID.");
-      else if (chargeIds.has(charge.id)) errors.push("Charge ID " + charge.id + " is used more than once in the register.");
+      else if (chargeIds.has(charge.id)) errors.push("duplicate charge ID " + charge.id + " is used more than once in the register.");
       chargeIds.add(charge.id);
       if (!(amount(charge.amount) >= 0)) errors.push("Charge " + (charge.id || "on loan " + loan.id) + " has an invalid amount.");
       if (!validDate(charge.on)) errors.push("Charge " + (charge.id || "on loan " + loan.id) + " has an invalid date.");
