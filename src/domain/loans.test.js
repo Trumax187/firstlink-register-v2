@@ -169,4 +169,6 @@ test("V1 migration stops on broken references and duplicate IDs", () => {
   assert.throws(()=>migrateV1Backup(bad),/duplicate ID/);
   const broken={app:"FirstLink",schemaVersion:1,data:{borrowers:[],items:[],loans:[{id:"l1",borrowerId:"missing",itemId:"missing",principal:100,issuedOn:"2026-11-01",dueOn:"2026-12-01",charges:[],repayments:[]}],events:[]}};
   assert.throws(()=>migrateV1Backup(broken),/missing borrower/);
+  const mismatched={app:"FirstLink",schemaVersion:1,data:{borrowers:[{id:"b1",name:"A"},{id:"b2",name:"B"}],items:[{id:"c1",borrowerId:"b2",desc:"Item",value:100,status:"held"}],loans:[{id:"l1",borrowerId:"b1",itemId:"c1",principal:100,issuedOn:"2026-11-01",dueOn:"2026-12-01",charges:[],repayments:[]}],events:[]}};
+  assert.throws(()=>migrateV1Backup(mismatched),/different borrower/);
 });
