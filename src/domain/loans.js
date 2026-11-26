@@ -105,3 +105,39 @@ export function canDeleteLoan(loan) {
   return (loan.repayments || []).length === 0 &&
     (loan.charges || []).length === 0 && loan.status !== "FORFEITED";
 }
+
+// Build a chronological register view from loan records and immutable events.
+// Loan disbursements and repayments affect cash; interest charges are accrued,
+// not cash receipts. A reversal is a separate negative cash movement.
+export function buildCashbookRows(db) {
+  const rows = [];
+  const customerName = id => db.customers?.find(x => x.id === id)?.name || "Unknown customer";
+  const collateralName = id => db.collateral?.find(x => x.id === id)?.description || "Collateral";
+  for (const loan of db.loans || []) {
+    const customer = customerName(loan.customerId);
+    rows.push({ id: loan.id + "-ISSUED", date: loan.issuedOn, type: "Loan issued", customer, description: collateralName(loan.collateralId), cashOut: money(loan.principal), cashIn: 0, interest: 0, principal: money(loan.principal) });
+    for (const charge of loan.charges || []) {
+      rows.push({ id: charge.id, date: charge.on, type: charge.kind === "RENEWAL" ? "Renewal interest charged" : "Interest charged", customer, description: charge.note || "Interest charge", cashOut: 0, cashIn: 0, charged: money(charge.amount), interest: money(charge.amount), principal: 0 });
+    }
+    const allocations = new Map(allocateRepayments(loan).map(x => [x.id, x]));
+    for (const repayment of loan.repayments || []) {
+      const reversalEvent = (db.events || []).find(e => e.type === "REVERSAL" && e.repaymentId === repayment.id);
+      const allocation = allocations.get(repayment.id);
+      rows.push({
+        id: repayment.id, date: repayment.on,
+        type: repayment.status === "REVERSED" ? "Repayment (later reversed)" : "Repayment",
+        customer, description: repayment.method || "Payment", cashOut: 0,
+        cashIn: money(repayment.amount),
+        interest: money(repayment.status === "REVERSED" ? (reversalEvent?.interest ?? 0) : (allocation?.interest ?? 0)),
+        principal: money(repayment.status === "REVERSED" ? (reversalEvent?.principal ?? 0) : (allocation?.principal ?? repayment.amount))
+      });
+    }
+  }
+  for (const event of db.events || []) {
+    if (event.type === "REVERSAL") {
+      const loan = (db.loans || []).find(x => x.id === event.loanId);
+      rows.push({ id: event.id, date: event.on || event.at?.slice(0,10), type: "Repayment reversal", customer: loan ? customerName(loan.customerId) : "Unknown customer", description: event.reason || event.text || "Reversal", cashOut: money(event.amount || 0), cashIn: 0, interest: -money(event.interest || 0), principal: -money(event.principal || 0) });
+    }
+  }
+  return rows.filter(x => x.date).sort((a,b) => String(b.date).localeCompare(String(a.date)) || String(a.id).localeCompare(String(b.id)));
+}
