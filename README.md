@@ -38,6 +38,8 @@ The current V2 foundation stores data in this browser on this device. It is not 
 
 - Principal and interest are recorded separately.
 - Initial and renewal charges are explicit ledger entries.
+- Operating expenses can be recorded with a category, description and payment method; they appear as cash outflows in the cashbook and period reports.
+- Cash movement reports deduct recorded expenses and loan disbursements from net receipts; they are not a verified till or bank balance.
 - Repayments cannot exceed the outstanding balance.
 - Repayment reversals retain the original repayment record and add an audit event.
 - Customers and collateral linked to loan history cannot be deleted.
@@ -50,4 +52,4 @@ The GitHub Actions workflow runs tests and builds the site, then deploys to GitH
 
 ## Important limitation
 
-This is an early working foundation, not yet a production-ready financial register. Before real records are entered, complete and verify the remaining V1 workflow parity, printable documents, CSV exports, full cashbook reconciliation, configurable policies, migration tooling, and browser/device recovery tests. Do not use real customer data in development builds.
+This is an early working foundation, not yet a production-ready financial register. Before real records are entered, complete and verify the remaining V1 workflow parity, printable documents, CSV exports, full cashbook reconciliation including opening balances, transfers and owner movements, configurable policies, migration tooling, and browser/device recovery tests. Do not use real customer data in development builds.
