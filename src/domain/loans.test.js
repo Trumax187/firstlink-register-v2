@@ -2,7 +2,7 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import { createLoan, totals, recordRepayment, reverseRepayment, renewLoan, canDeleteLoan, allocateRepayments, buildCashbookRows } from "./loans.js";
 import { buildExportDatasets, buildReportSummary, buildPeriodReport, buildPeriodExport, reconcileRegister, toCsv } from "./reports.js";
-import { DEFAULT_LENDING_POLICY, normalizeLendingPolicy, validateLendingPolicy, loanDraftDefaults } from "./policies.js";
+import { DEFAULT_LENDING_POLICY, normalizeLendingPolicy, validateLendingPolicy } from "./policies.js";
 import { migrateV1Backup } from "./migration.js";
 
 const loan = () => createLoan({ id:"L1", customerId:"C1", collateralId:"A1", principal:1000, mode:"percent", value:20, periodDays:30, issuedOn:"2026-11-01" });
@@ -130,20 +130,23 @@ test("renewing an overdue loan starts the new term on the renewal date", () => {
   assert.equal(renewed.charges.at(-1).on,"2026-12-10");
 });
 
-test("lending policy defaults are normalized for older register data", () => {
-  assert.deepEqual(normalizeLendingPolicy({forfeitGraceDays:10}),{...DEFAULT_LENDING_POLICY,forfeitGraceDays:10});
-  assert.deepEqual(loanDraftDefaults({defaultInterestMode:"fixed",defaultInterestValue:75,defaultPeriodDays:14}),{mode:"fixed",interestValue:"75",periodDays:"14"});
+test("lending policy normalization keeps the grace period and ignores obsolete loan defaults", () => {
+  assert.deepEqual(DEFAULT_LENDING_POLICY, {forfeitGraceDays:7});
+  assert.deepEqual(normalizeLendingPolicy({forfeitGraceDays:10}), {forfeitGraceDays:10});
+  assert.deepEqual(
+    normalizeLendingPolicy({forfeitGraceDays:10,defaultInterestMode:"fixed",defaultInterestValue:75,defaultPeriodDays:14}),
+    {forfeitGraceDays:10}
+  );
+  assert.deepEqual(normalizeLendingPolicy({}), {forfeitGraceDays:7});
 });
 
-test("lending policy validation accepts valid settings and rejects invalid ranges", () => {
-  assert.deepEqual(validateLendingPolicy({forfeitGraceDays:0,defaultInterestMode:"percent",defaultInterestValue:12.5,defaultPeriodDays:30}),{forfeitGraceDays:0,defaultInterestMode:"percent",defaultInterestValue:12.5,defaultPeriodDays:30});
-  assert.throws(()=>validateLendingPolicy({forfeitGraceDays:-1,defaultInterestMode:"percent",defaultInterestValue:10,defaultPeriodDays:30}));
-  assert.throws(()=>validateLendingPolicy({forfeitGraceDays:7,defaultInterestMode:"monthly",defaultInterestValue:10,defaultPeriodDays:30}));
-  assert.throws(()=>validateLendingPolicy({forfeitGraceDays:7,defaultInterestMode:"fixed",defaultInterestValue:-1,defaultPeriodDays:30}));
-  assert.throws(()=>validateLendingPolicy({forfeitGraceDays:7,defaultInterestMode:"fixed",defaultInterestValue:10,defaultPeriodDays:0}));
+test("lending policy validation accepts valid grace periods and rejects invalid ranges", () => {
+  assert.deepEqual(validateLendingPolicy({forfeitGraceDays:0}), {forfeitGraceDays:0});
+  assert.deepEqual(validateLendingPolicy({forfeitGraceDays:7}), {forfeitGraceDays:7});
+  assert.throws(()=>validateLendingPolicy({forfeitGraceDays:-1}));
+  assert.throws(()=>validateLendingPolicy({forfeitGraceDays:3651}));
+  assert.throws(()=>validateLendingPolicy({forfeitGraceDays:1.5}));
 });
-
-
 test("V1 migration maps customers, collateral, loan terms and reversals without losing history", () => {
   const backup={app:"FirstLink",schemaVersion:1,data:{
     borrowers:[{id:"b1",name:"Test Borrower",phone:"0970000000",nrc:"123456/78/9",area:"Lusaka"}],

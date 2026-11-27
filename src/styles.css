@@ -3,3 +3,77 @@
 @media(max-width:700px){.sidebar{display:none}.main{margin:0}.topbar{height:auto;min-height:76px;padding:15px 17px}.topbar h1{font-size:19px}.eyebrow{font-size:8px}.top-actions input{width:min(42vw,190px);font-size:11px}.user-pill{display:none}.content{padding:20px 15px 90px}.welcome{align-items:flex-start}.welcome h2{font-size:21px}.welcome p,.page-actions p{font-size:11px}.welcome .primary,.page-actions .primary{white-space:nowrap;padding:10px}.metrics{gap:9px}.report-grid{padding:12px 12px 0;gap:8px}.report-grid .metric{padding:12px;min-height:82px}.report-grid .metric strong{font-size:16px}.report-actions{padding:0 12px 12px}.metric{padding:14px;min-height:88px}.metric strong{font-size:19px}.metric span{font-size:10px}.record,.loan-row{padding:13px}.record-end{gap:6px;flex-direction:column;align-items:flex-end}.detail{padding:24px 18px}.ledger-row{grid-template-columns:65px minmax(100px,1fr) 72px 72px 56px;min-width:365px;gap:7px;padding:12px 10px;font-size:10px}.ledger-row>*:nth-child(3),.ledger-row>*:nth-child(4){display:none}.ledger-row b{font-size:10px}.mobile-nav{display:flex;position:fixed;bottom:0;left:0;right:0;z-index:8;background:#fff;border-top:1px solid #dce3eb;justify-content:space-around;padding:8px 3px env(safe-area-inset-bottom)}.mobile-nav button{border:0;background:none;color:#66768a;font-size:9px;padding:7px 3px;max-width:16%;font-weight:700}.mobile-nav button.active{color:#173a62}.form-grid{grid-template-columns:1fr}.page-actions{align-items:flex-start}.page-actions p{padding-top:8px}}
 
 .period-controls{display:flex;align-items:end;gap:12px;flex-wrap:wrap;padding:4px 20px 16px}.period-controls .field{flex:1;min-width:150px}.period-controls button{margin-bottom:2px}.reconcile-head{display:flex;align-items:center;justify-content:space-between;gap:12px;padding:12px 20px;color:#142d4e;font-size:13px}.reconcile-good{color:#17634d}.reconcile-bad{color:#b42318}.panel .alert ul{padding-left:20px;margin:8px 0 0}.panel .alert li{margin:4px 0}
+/* Cashbook financial column alignment */
+.ledger-row {
+  grid-template-columns: 95px 145px minmax(210px, 1fr) 100px 105px 105px 75px;
+  min-width: 955px;
+  gap: 12px;
+}
+
+.ledger-row > :nth-child(4),
+.ledger-row > :nth-child(5),
+.ledger-row > :nth-child(6) {
+  text-align: right;
+  padding-left: 12px;
+  border-left: 1px solid #e2e8f0;
+  font-variant-numeric: tabular-nums;
+}
+
+.ledger-row.head > :nth-child(4),
+.ledger-row.head > :nth-child(5),
+.ledger-row.head > :nth-child(6) {
+  text-align: right;
+  color: #40536b;
+}
+
+.ledger-row > :nth-child(7) {
+  text-align: center;
+  padding-left: 8px;
+  border-left: 1px solid #e2e8f0;
+}
+
+.ledger-row.head {
+  background: #f1f5f9;
+  border-bottom: 2px solid #d7e0ea;
+  min-height: 48px;
+}
+
+.ledger-row:not(.head):nth-child(even) {
+  background: #fafbfd;
+}
+
+.ledger-row:not(.head):hover {
+  background: #f0f6fc;
+}
+
+.ledger-row b {
+  font-variant-numeric: tabular-nums;
+}
+
+/* Preserve the compact cashbook layout on mobile */
+@media (max-width:700px) {
+  .ledger-row {
+    grid-template-columns: 65px minmax(100px,1fr) 72px 72px 56px;
+    min-width: 365px;
+    gap: 7px;
+    padding: 12px 10px;
+    font-size: 10px;
+  }
+
+  .ledger-row > :nth-child(3),
+  .ledger-row > :nth-child(4) {
+    display: none;
+  }
+
+  .ledger-row > :nth-child(5),
+  .ledger-row > :nth-child(6) {
+    text-align: right;
+    padding-left: 6px;
+    border-left: 1px solid #e2e8f0;
+  }
+
+  .ledger-row > :nth-child(7) {
+    text-align: center;
+    padding-left: 4px;
+  }
+}
